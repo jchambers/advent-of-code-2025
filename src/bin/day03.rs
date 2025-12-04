@@ -42,17 +42,19 @@ impl BatteryBank {
         let mut joltage = 0u64;
         let mut left = 0;
 
-        for reserved_batteries in (0..active_batteries).rev() {
-            let best_joltage = self.batteries[left..self.batteries.len() - reserved_batteries]
-                .iter()
-                .max()
-                .unwrap();
+        assert!(active_batteries <= self.batteries.len());
 
-            left += self.batteries[left..]
+        for reserved_batteries in (0..active_batteries).rev() {
+            let (position, best_joltage) = self.batteries[left..self.batteries.len() - reserved_batteries]
                 .iter()
-                .position(|joltage| joltage == best_joltage)
-                .unwrap()
-                + 1;
+                .enumerate()
+                // This may seem a little funky, but max_by_key will return the LAST element it
+                // finds, and we really want the FIRST
+                .rev()
+                .max_by_key(|(_, j)| *j)
+                .expect("Non-empty bank of batteries must have at least one max value");
+
+            left += position + 1;
 
             joltage = (joltage * 10) + (*best_joltage as u64);
         }
