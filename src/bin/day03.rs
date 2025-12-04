@@ -9,8 +9,13 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     if let Some(path) = args.get(1) {
         println!(
-            "Joltage sum: {}",
-            joltage_sum(BufReader::new(File::open(path)?))?
+            "Joltage sum with 2 active batteries: {}",
+            joltage_sum(BufReader::new(File::open(path)?), 2)?
+        );
+
+        println!(
+            "Joltage sum with 12 active batteries: {}",
+            joltage_sum(BufReader::new(File::open(path)?), 12)?
         );
 
         Ok(())
@@ -19,14 +24,17 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
 }
 
-fn joltage_sum(reader: impl BufRead) -> Result<u32, Box<dyn Error>> {
+fn joltage_sum(reader: impl BufRead, active_batteries: usize) -> Result<u64, Box<dyn Error>> {
     let battery_banks = reader
         .lines()
         .map_while(|result| result.ok())
         .map(|line| BatteryBank::from_str(&line))
         .collect::<Result<Vec<_>, _>>()?;
 
-    Ok(battery_banks.iter().map(|bank| bank.max_joltage()).sum())
+    Ok(battery_banks
+        .iter()
+        .map(|bank| bank.max_joltage(active_batteries))
+        .sum())
 }
 
 struct BatteryBank {
@@ -34,24 +42,26 @@ struct BatteryBank {
 }
 
 impl BatteryBank {
-    pub fn max_joltage(&self) -> u32 {
-        let first_joltage = self.batteries[..self.batteries.len() - 1]
-            .iter()
-            .max()
-            .expect("Battery bank must have more than two elements");
+    pub fn max_joltage(&self, active_batteries: usize) -> u64 {
+        let mut joltage = 0u64;
+        let mut left = 0;
 
-        let first_battery_position = self
-            .batteries
-            .iter()
-            .position(|joltage| joltage == first_joltage)
-            .expect("Battery must contain previously-identified joltage");
+        for reserved_batteries in (0..active_batteries).rev() {
+            let best_joltage = self.batteries[left..self.batteries.len() - reserved_batteries]
+                .iter()
+                .max()
+                .unwrap();
 
-        let second_joltage = self.batteries[first_battery_position + 1..]
-            .iter()
-            .max()
-            .expect("Battery bank must have a battery after the first selected");
+            left += self.batteries[left..]
+                .iter()
+                .position(|joltage| joltage == best_joltage)
+                .unwrap()
+                + 1;
 
-        (first_joltage * 10) + second_joltage
+            joltage = (joltage * 10) + (*best_joltage as u64);
+        }
+
+        joltage
     }
 }
 
@@ -88,33 +98,69 @@ mod test {
             98,
             BatteryBank::from_str("987654321111111")
                 .unwrap()
-                .max_joltage()
+                .max_joltage(2)
         );
 
         assert_eq!(
             89,
             BatteryBank::from_str("811111111111119")
                 .unwrap()
-                .max_joltage()
+                .max_joltage(2)
         );
 
         assert_eq!(
             78,
             BatteryBank::from_str("234234234234278")
                 .unwrap()
-                .max_joltage()
+                .max_joltage(2)
         );
 
         assert_eq!(
             92,
             BatteryBank::from_str("818181911112111")
                 .unwrap()
-                .max_joltage()
+                .max_joltage(2)
+        );
+
+        assert_eq!(
+            987654321111,
+            BatteryBank::from_str("987654321111111")
+                .unwrap()
+                .max_joltage(12)
+        );
+
+        assert_eq!(
+            811111111119,
+            BatteryBank::from_str("811111111111119")
+                .unwrap()
+                .max_joltage(12)
+        );
+
+        assert_eq!(
+            434234234278,
+            BatteryBank::from_str("234234234234278")
+                .unwrap()
+                .max_joltage(12)
+        );
+
+        assert_eq!(
+            888911112111,
+            BatteryBank::from_str("818181911112111")
+                .unwrap()
+                .max_joltage(12)
         );
     }
 
     #[test]
     fn test_max_joltage_sum() {
-        assert_eq!(357, joltage_sum(Cursor::new(TEST_BATTERY_BANKS)).unwrap());
+        assert_eq!(
+            357,
+            joltage_sum(Cursor::new(TEST_BATTERY_BANKS), 2).unwrap()
+        );
+
+        assert_eq!(
+            3121910778619,
+            joltage_sum(Cursor::new(TEST_BATTERY_BANKS), 12).unwrap()
+        );
     }
 }
