@@ -25,16 +25,12 @@ fn main() -> Result<(), Box<dyn Error>> {
 }
 
 fn joltage_sum(reader: impl BufRead, active_batteries: usize) -> Result<u64, Box<dyn Error>> {
-    let battery_banks = reader
+    reader
         .lines()
         .map_while(|result| result.ok())
         .map(|line| BatteryBank::from_str(&line))
-        .collect::<Result<Vec<_>, _>>()?;
-
-    Ok(battery_banks
-        .iter()
-        .map(|bank| bank.max_joltage(active_batteries))
-        .sum())
+        .map(|battery_bank| battery_bank.map(|b| b.max_joltage(active_batteries)))
+        .sum::<Result<_, _>>()
 }
 
 struct BatteryBank {
