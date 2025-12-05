@@ -16,7 +16,8 @@ fn main() -> Result<(), Box<dyn Error>> {
             Warehouse::from_str(warehouse_map.as_str())?
         };
 
-        println!("Movable rolls: {}", warehouse.movable_rolls());
+        println!("Initial movable rolls: {}", warehouse.movable_rolls().len());
+        println!("Total movable rolls: {}", warehouse.minimize());
 
         Ok(())
     } else {
@@ -30,8 +31,8 @@ struct Warehouse {
 }
 
 impl Warehouse {
-    pub fn movable_rolls(&self) -> usize {
-        let mut movable_rolls = 0;
+    pub fn movable_rolls(&self) -> Vec<(usize, usize)> {
+        let mut movable_rolls = Vec::new();
 
         for x in 0..self.width {
             for y in 0..self.height() {
@@ -43,13 +44,43 @@ impl Warehouse {
                         .count();
 
                     if adjacent_rolls < 4 {
-                        movable_rolls += 1;
+                        movable_rolls.push((x, y));
                     }
                 }
             }
         }
 
         movable_rolls
+    }
+
+    pub fn minimize(mut self) -> usize {
+        let initial_rolls = self
+            .tiles
+            .iter()
+            .filter(|tile| matches!(tile, Tile::PaperRoll))
+            .count();
+
+        let height = self.height();
+
+        loop {
+            let movable_rolls = self.movable_rolls();
+
+            if movable_rolls.is_empty() {
+                break;
+            }
+
+            for (x, y) in movable_rolls {
+                self.tiles[x + (y * height)] = Tile::Empty;
+            }
+        }
+
+        let remaining_rolls = self
+            .tiles
+            .iter()
+            .filter(|tile| matches!(tile, Tile::PaperRoll))
+            .count();
+
+        initial_rolls - remaining_rolls
     }
 
     fn height(&self) -> usize {
@@ -145,7 +176,15 @@ mod test {
     fn test_movable_rolls() {
         assert_eq!(
             13,
-            Warehouse::from_str(TEST_WAREHOUSE).unwrap().movable_rolls()
+            Warehouse::from_str(TEST_WAREHOUSE)
+                .unwrap()
+                .movable_rolls()
+                .len()
         );
+    }
+
+    #[test]
+    fn test_minimize() {
+        assert_eq!(43, Warehouse::from_str(TEST_WAREHOUSE).unwrap().minimize());
     }
 }
