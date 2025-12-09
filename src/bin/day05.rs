@@ -10,7 +10,12 @@ fn main() -> Result<(), Box<dyn Error>> {
     if let Some(path) = args.get(1) {
         let database = IngredientDatabase::try_from_buf_read(BufReader::new(File::open(path)?))?;
 
-        println!("Fresh ingredients: {}", database.fresh_ingredients());
+        println!("Actual fresh ingredients: {}", database.fresh_ingredients());
+
+        println!(
+            "Possible fresh ingredients: {}",
+            database.possible_fresh_ingredients()
+        );
 
         Ok(())
     } else {
@@ -57,6 +62,37 @@ impl IngredientDatabase {
             .filter(|id| self.fresh_ranges.iter().any(|range| range.contains(id)))
             .count()
     }
+
+    pub fn possible_fresh_ingredients(&self) -> u64 {
+        let mut merged_ranges: Vec<RangeInclusive<u64>> = Vec::new();
+
+        let mut sorted_ranges = self.fresh_ranges.clone();
+        sorted_ranges.sort_by_key(|range| *range.start());
+        let sorted_ranges = sorted_ranges;
+
+        for range in sorted_ranges {
+            if merged_ranges
+                .last()
+                .map(|last_merged_range| last_merged_range.contains(range.start()))
+                .unwrap_or(false)
+            {
+                // The ranges overlap, so smoosh them together
+                let last_merged_range = merged_ranges.pop().unwrap();
+
+                merged_ranges.push(RangeInclusive::new(
+                    *last_merged_range.start().min(range.start()),
+                    *last_merged_range.end().max(range.end()),
+                ));
+            } else {
+                merged_ranges.push(range);
+            }
+        }
+
+        merged_ranges
+            .iter()
+            .map(|range| range.end() - range.start() + 1)
+            .sum()
+    }
 }
 
 #[cfg(test)]
@@ -86,6 +122,16 @@ mod test {
             IngredientDatabase::try_from_buf_read(Cursor::new(TEST_DATABASE))
                 .unwrap()
                 .fresh_ingredients()
+        );
+    }
+
+    #[test]
+    fn test_possible_fresh_ingredients() {
+        assert_eq!(
+            14,
+            IngredientDatabase::try_from_buf_read(Cursor::new(TEST_DATABASE))
+                .unwrap()
+                .possible_fresh_ingredients()
         );
     }
 }
